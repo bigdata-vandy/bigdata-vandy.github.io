@@ -1,11 +1,12 @@
 ---
 layout: post
 title:  "Introduction to the Big Data Cluster"
+date:   2017-02-02 12:34:00 -0600
 categories: introduction specs
 ---
 
-In this post, we'll introduce you to the hardware, software, entry points, and 
-workflows of our big data cluster, "bigdata".
+In this post, we'll introduce you to the hardware, software, and entry points 
+of our big data cluster, "bigdata".
 
 # The Hardware
 The current bigdata cluster is a test cluster comprised of commercial hardware.
@@ -16,7 +17,7 @@ to the management of the cluster:
 - abd741
 - abd742
 
-The computational *guts* of bigdata are the datanades, 
+The computational *guts* of bigdata are the datanodes, 
 
 - abd743 
 - abd744 
@@ -32,7 +33,8 @@ for the OS and software, but for mounting the Hadoop Distributed File System
 
 # The Software
 
-Cloudera Manager is deployed on the cluster to coordinate job submission,
+Cloudera Manager is deployed on the cluster to coordinate job submission, with 
+the following services running on each node:
 
 - abd740
   * Cloudera Manager 
@@ -73,13 +75,14 @@ Cloudera Manager is deployed on the cluster to coordinate job submission,
 # Interacting with the Cluster
 Obviously, there's a lot going on in managing the cluster, but, luckily,
 Cloudera provides the Hadoop User Experience (Hue) tool to coordinate
-constructing and exectuing jobs (not to mention browing and managing HDFS data)
+constructing and executing jobs (not to mention browsing and managing HDFS data)
 through the interface `bigdata.accre.vanderbilt.edu:8888`. Users need
 a valid Vanderbilt ID and password to log on, and once they've logged on,
 should [contact ACCRE](http://www.accre.vanderbilt.edu/?page_id=367) 
 about getting permission. Once approved, users will be
 able to connect to `bigdata.accre.vanderbilt.edu` with `ssh`.
 
-Getting started with
-Hue will be the subject of it's own future post, but most people should find
+Getting started with Hue will be the subject of it's own future post, 
+but most people should find
 it fairly intuitive.
+
