@@ -4,12 +4,11 @@ title: About
 permalink: /about/
 ---
 
-This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at [jekyllrb.com](http://jekyllrb.com/)
+The Vanderbilt Big Data Cluster is maintained by [ACCRE][accre-home]. 
 
-You can find the source code for the Jekyll new theme at:
-{% include icon-github.html username="jekyll" %} /
-[minima](https://github.com/jekyll/minima)
+Most of the blog posts correspond to code examples found in our 
+[our GitHub repo][bigdata-gh]. 
 
-You can find the source code for Jekyll at
-{% include icon-github.html username="jekyll" %} /
-[jekyll](https://github.com/jekyll/jekyll)
+
+[accre-home]:   http://www.accre.vanderbilt.edu
+[bigdata-gh]:   https://github.com/bigdata-vandy

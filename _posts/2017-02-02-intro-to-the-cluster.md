@@ -3,6 +3,7 @@ layout: post
 title:  "Introduction to the Big Data Cluster"
 date:   2017-02-02 12:34:00 -0600
 categories: introduction specs
+author: Josh Arnold
 ---
 
 In this post, we'll introduce you to the hardware, software, and entry points 
