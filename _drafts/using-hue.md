@@ -1,6 +1,7 @@
 ---
 layout: post
 title:  "Using Hue on the Big Data Cluster"
+author: Josh Arnold
 categories: hue cloudera spark 
 ---
 
@@ -18,19 +19,24 @@ Navigate to `bigdata.accre.vanderbilt.edu:8888` in your web browser.
 
 # Overview of Cloudera Services
 
-| Cloudera Services | Description |
-|-------------------|-------------|
-| Cloudera Manager  | Coordinates services |
-| YARN              | Yet Another Resource Negotiator |
-| Oozie             | Schedules jobs, combines jobs |
-| MR2               | MapReduce 2 |
-| Hue               | User interface for constructing Jobs |
-| Spark             | Builds on MR2 to include caching |
-| Hive              | Parallel DBMS |
-| Impala            |  |
-| HBase             | |
-| Pig               | |
+The Hadoop ecosystem is thriving, and Cloudera implememnts many of these
+technologies out of the box.
 
+| Cloudera Services     | Description 
+|---------------------- |-------------
+| Cloudera Manager      | Coordinates services 
+| YARN                  | Yet Another Resource Negotiator 
+| Oozie                 | Web app for scheduling Hadoop jobs 
+| MR2 (MapReduce 2)     | MapReduce jobs running on top of YARN 
+| Hue                   | User interface for constructing Jobs 
+| Spark                 |  
+| Hive                  | ETL transformations expressed as SQL
+| Impala                | Interactive SQL 
+| HBase                 | Random, realtime read/write access to distributed big data store
+| Pig                   | High-level language for expressing data analysis programs 
+| Solr                  | Text search engine supporting free form queries 
+
+In general 
 
 # Using the HDFS File Browser
 If you've used the web UIs for Dropbox, Google Drive, etc., then this step
@@ -40,11 +46,15 @@ dog-eared-piece-of-paper icon near the top right of the screen.
 *Note: by default, logging in to Hue creates a new user's home directory
 at /user/username with read and execute permissions enabled for the world!*
 
-There is a limit to the file size.
+The file size for transferring through the WebUI is capped at 50GB ??.
 
-# Running MapReduce
+# MapReduce
 
-# Running Spark Wordcount
+The origins of Big Data as we know it today start with MapReduce. 
+MapReduce 1 was designed to move computation to the data. 
 
+But no mechanism for caching... 
 
+# Spark
+Enter Spark
 

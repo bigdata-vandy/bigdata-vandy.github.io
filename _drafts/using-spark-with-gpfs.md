@@ -1,6 +1,7 @@
 ---
 layout: post
 title:  "Using Spark with GPFS on the ACCRE Cluster"
+author: Josh Arnold
 categories: spark slurm 
 ---
 
