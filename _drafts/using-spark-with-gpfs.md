@@ -6,47 +6,67 @@ categories: spark slurm
 ---
 
 GPFS (General Parallel File System) is a proprietary, resilient, replicated
-network files system developed at IBM. 
+network files system developed at IBM. The traditional ACCRE HPC Cluster uses
+GPFS to share files in the `/home`, `/scratch`, and `/data`. We're going to analyze
+files on these shared network drives using Spark. Note that we're not using the
+BigData Cluster for this job; rather, we're running Spark on the production partition 
+of the ACCRE cluster to reveal the inner workings of Spark's standalone 
+cluster model. 
 
-Running Spark on the production partition of the ACCRE cluster is a good
-way to grasp the inner workings of Spark's standalone cluster model. 
+The test application we're running is [wordcount][gh-spark-wc] which will be 
+the subject of another post. For now, suffice it to say that we've chosen Spark
+for these reasons:
 
-## Why Spark? 
-Abstracts away parallelism.
-Client mode, communicate over `ssh`.
+- Distributes jobs transparently to the application
+- No MPI programming; communicates via `ssh`
+- Terse code
+
+Feel free to follow along with the [code repo][accre-gh-ss].
 
 ## SLURM Configuration 
-Scheduler and Resource manager. 
+SLURM is the scheduler and resource manager utilized on the ACCRE HPC cluster, and 
+in order to provision a cluster on SLURM, we have to go through SLURM. The credit for working out most of the logic goes to this post on
+[serverfault][server-fault].
 
-The credit for working out most of the logic goes to this post on
-[serverfault](http://serverfault.com/questions/776687/how-can-i-run-spark-on-a-cluster-using-slurm).
+The mechanics of launching a Spark cluster are a little more complicated than
+most SLURM workflows, but the idea is pretty straightforward: we request a SLURM
+job using `sbatch` that blocks out all the resources we'll need for starting the 
+cluster. Within this allocation, we're going to launch a Spark standalone cluster, 
+which has the distinct roles of Client, Master, and Worker. The code that each of these
+roles execute is defined with the `task-roles.sh` shell script; this script takes
+a single argment that indicates which role is intended to be executed.
 
-The idea is to keep all of our SLURM code in a single script, to make the logic easier
-to read. As such, we use recursive calls to the same script and pass along a flag
-argment `LEVEL` which denotes the block of code that we wish to run. 
 
-### Provisioning with SLURM 
+
+### Provisioning resources with SLURM 
 
 Our Spark cluster is provisioned through the SLURM script `batch-job.slurm` using
 the `sbatch` command; this script requests resources for one task for the Client,
 one task for the Master, and an arbitrary number of tasks for Workers. Currently,
 SLURM only supports homogeneous resource allocation, so there's no way to customize
 the resources depending on the task type. It's a little bit of waste of resources,
-but it's pretty much necessary at this point. 
+but it's pretty much necessary at this point.
+
+In addition to the SLURM directives, there are a number of global variables
+which are necessary for one of the Spark tasks. The number of cores and memory
+allocated to the Spark job are calculated here, which prevents Spark from 
+grabbing more resources than SLURM has allocted. So, in order to create a larger
+cluster, just change the SBATCH directives for `ntasks` and, possibly, `mem-per-cpu`.
 
 ```bash
 #!/bin/bash
 
 #SBATCH --ntasks=4
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00:02:00
-#SBATCH --mem-per-cpu=2G
+#SBATCH --time=00:10:00
+#SBATCH --mem-per-cpu=8G
 #SBATCH --partition=debug
     
-
+# Create a directory on /scratch to hold some info for this job
 export JOB_ID=$SLURM_JOB_ID
 export JOB_HOME="/scratch/$USER/$JOB_ID"
 echo "JOB_HOME=$JOB_HOME"
+mkdir -p $JOB_HOME
 
 export NWORKERS=$(( $SLURM_NTASKS - 2 ))
 echo "NWORKERS=$NWORKERS"
@@ -55,23 +75,26 @@ export LAST_PROC=$(( $SLURM_NTASKS - 1 ))
 
 export SPARK_WORKER_DIR=$JOB_HOME/work
 export SPARK_LOCAL_DIR=$JOB_HOME/tmp
+mkdir -p $SPARK_WORKER_DIR $SPARK_LOCAL_DIR 
 
-# setpkgs -a spark_2.1.0 # sets JAVA_HOME and SPARK_HOME
-export JAVA_HOME=/usr/local/java/1.8.0
-export SPARK_HOME="$HOME/packages/spark-2.1.0-bin-hadoop2.7"
-mkdir -p $JOB_HOME $SPARK_WORKER_DIR $SPARK_LOCAL_DIR 
-
+# Don't mess with these unless you know what you are doing
 export SPARK_WORKER_CORES=$SLURM_CPUS_PER_TASK
-export SPARK_DAEMON_MEMORY=$(( SLURM_MEM_PER_CPU * $SLURM_CPUS_PER_TASK / 2 ))m
+export SPARK_DAEMON_MEMORY=$(( SLURM_MEM_PER_CPU * $SLURM_CPUS_PER_TASK - 2000 ))m
 export SPARK_MEMORY=$SPARK_DAEMON_MEMORY
 
+# These are the defaults anyways, but configurable 
 export SPARK_MASTER_PORT=7077
 export SPARK_MASTER_WEBUI_PORT=8080
+
+
+# Load the Spark package
+setpkgs -a spark_2.1.0 # sets JAVA_HOME and SPARK_HOME
 
 # Try to load stuff that the spark scripts will load
 source "$SPARK_HOME/sbin/spark-config.sh"
 source "$SPARK_HOME/bin/load-spark-env.sh"
 ```
+
 In order to use our processes, we use the `--multi-prog` option of the srun
 command, which allows specifying different exectuables for each task using
 a plain-text config file. Rather than updating this file every time we 
@@ -107,9 +130,48 @@ echo $(hostname)": $LEVEL"
 ```
 
 There's nothing to special about this snippet; the first `if` statement checks that
-a single argument has been provided.
+a single argument has been provided. The echo statement is simply for debugging.
 
-Checking for Master and Workers
+If we don't specify a node to SLURM, then we don't know *a priori* on which node
+the Master job will land. So, instead, we wait for the Master to write its URL to 
+a GPFS-shared drive, in this case `$JOB_HOME/master_url`. The Client waits for 
+the master to write to this location with a timeout of 100 seconds. 
+In Standalone deploy mode, Spark communicates via ssh, so there's no need to 
+communicate between jobs with MPI via [srun][slurm-srun].
+
+
+
+### The Client
+
+The first code block that encapsulates one level of our recursion is the Client block.
+The Client block starts with exporting the `SLURM_JOB_ID` of the client and a number of 
+Spark-specific variables, and because these variables are exported, they will be
+available to the child processes (SLURM jobs) that we start from Client.
+
+```bash
+if [ $LEVEL == "CLIENT" ]; then
+
+    # Wait for the master to signal back
+    getMasterURL
+    echo "Master Host: $MASTER_HOST"
+    msg1="To tunnel to MasterUI and JobUI -> ssh "
+    msg1+="-L $SPARK_MASTER_WEBUI_PORT:$MASTER_HOST:$SPARK_MASTER_WEBUI_PORT "
+    msg1+="-L 4040:$MASTER_HOST:4040 "
+    msg1+="$USER@login.accre.vanderbilt.edu"
+    echo $msg1
+    
+    # Wait for workers to signal back
+    confirmWorkers 
+
+    # Submit the Spark application, as defined in APP
+    $SPARK_HOME/bin/spark-submit \
+        --master $MASTER_URL \
+        --deploy-mode client \
+        --total-executor-cores $(( NWORKERS * $SPARK_EXECUTOR_CORES )) \
+				$APP   
+```
+
+The function `getMasterURL` waits for the Master to write to Workers
 
 ```bash
 # Reads the master URL from a shared location, indicating that the
@@ -136,11 +198,16 @@ function getMasterURL {
     
     MASTER_URL="spark://$MASTER_HOST:$SPARK_MASTER_PORT"
 }
+```
 
+The function `confirmWorkers` waits for all Workers to write their process IDs to
+a shared location.
+
+```bash
 # Reads files named after worker process IDs
 # Once each worker has written its hostname to file, 
 # this function terminates
-function getPID {
+function confirmWorkers {
     local i=0
 
     while (( i < $NWORKERS )); do
@@ -157,34 +224,6 @@ function getPID {
 }
 ```
 
-# The Client
-
-The first code block that encapsulates one level of our recursion is the Client block.
-The Client block starts with exporting the `SLURM_JOB_ID` of the client and a number of 
-Spark-specific variables, and because these variables are exported, they will be
-available to the child processes (SLURM jobs) that we start from Client.
-
-```bash
-if [ $LEVEL == "CLIENT" ]; then
-   
-    export CLIENT_JOB_ID=$SLURM_JOB_ID
-    export JOB_HOME="/scratch/$USER/$CLIENT_JOB_ID"
-    
-    export SPARK_WORKER_DIR=$JOB_HOME/work
-    export SPARK_LOCAL_DIR=$JOB_HOME/tmp
-    export JAVA_HOME=/usr/local/java/1.8.0
-    export SPARK_HOME="$HOME/packages/spark-2.1.0-bin-hadoop2.7"
-    mkdir -p $JOB_HOME $SPARK_WORKER_DIR $SPARK_LOCAL_DIR 
-
-    export SPARK_WORKER_CORES=1
-    export SPARK_DAEMON_MEMORY=2g
-    export SPARK_MEMORY=2g
-    
-    # Try to load stuff that the spark scripts will load
-    source "$SPARK_HOME/sbin/spark-config.sh"
-    source "$SPARK_HOME/bin/load-spark-env.sh"
-   
-```
 
 Note that we create directories to keep all the job output together under our a 
 parent directory named after the Client's job ID. 
@@ -193,55 +232,6 @@ Once the setup is out of the way, we're ready to allocate and launch a
 SLURM job that will run Spark Master program. Here, we're providing 10G of memory
 on a single node to run the Master.
 
-```bash
-    # Launch a job to start the Master
-    MASTER_JOB_ID=$(sbatch \
-        --nodes=1 \
-        --mem=10G \
-        $SCRIPT_PATH MASTER)
-    echo $MASTER_JOB_ID
-    MASTER_JOB_ID=${MASTER_JOB_ID//[!0-9]/} 
-   
-    # Read the master url from shared location 
-    MASTER_URL=''
-    i=0
-    while [ -z "$MASTER_URL" ]; do
-        if (( $i > 100 )); then
-            echo "Starting master timed out"; exit 1
-        fi
-        sleep 1s
-        if [ -f $JOB_HOME/master_url ]; then
-            MASTER_URL=$(head -1 $JOB_HOME/master_url)
-        fi
-        ((i++))
-    done
-    echo "Master URL = $MASTER_URL"
-```
-
-If we don't specify a node to SLURM, then we don't know *a priori* on which node
-the Master job will land. So, instead, we wait for the Master to write its URL to 
-a GPFS-shared drive, in this case `$JOB_HOME/master_url`. The Client waits for 
-the master to write to this location with a timeout of 100 seconds. 
-In Standalone deploy mode, Spark communicates via ssh, so there's no need to 
-communicate between jobs with MPI via [srun][slurm-srun].
-
-```bash
-    # Launch a job to start the Worker nodes
-    export MASTER_URL=$MASTER_URL # necessary to start a worker
-
-    # Since Spark uses ssh in standalone cluster mode, there's
-    # no need to invoke MPI
-    WORKERS_JOB_ID=$(sbatch \
-        --nodes=1 \
-        --ntasks-per-node=1 \
-        --cpus-per-task=$SPARK_WORKER_CORES \
-        --mem=10G \
-        --time=00:05:00 \
-        $SCRIPT_PATH WORKER)
-    echo $WORKERS_JOB_ID
-    WORKERS_JOB_ID=${WORKERS_JOB_ID//[!0-9]/} 
-  
-```
 
 Once the Workers are up, we are ready to submit our job using `spark-submit`. The 
 options we're passing to the `spark-submit` specify the address of the Master and 
@@ -270,7 +260,7 @@ that the driver will run on the Client node.
 At the end of the Client job, we cancel the SLURM jobs for the Master and Workers
 since they would otherwise continue running until reaching their time limit.
 
-# The Master
+### The Master
 
 ```bash
 elif [ $LEVEL == MASTER ]; then
@@ -290,23 +280,57 @@ elif [ $LEVEL == MASTER ]; then
     
     # Start the Spark master
     $SPARK_HOME/bin/spark-class org.apache.spark.deploy.master.Master \
-        --ip $SPARK_MASTER_HOST \
-        --port $SPARK_MASTER_PORT \
-        --webui-port $SPARK_MASTER_WEBUI_PORT
+      --ip $SPARK_MASTER_HOST \
+      --port $SPARK_MASTER_PORT \
+      --webui-port $SPARK_MASTER_WEBUI_PORT
 ```
 
-# The Worker
+### The Worker
+
+We force the Workers to wait on the Master to broadcast its URL before they start
+themselves, even though Workers will automatically retry if the master URL is 
+not specified. Then, we simply need to start the worker through its class.
 
 ```bash
 elif [ $LEVEL == "WORKER" ]; then
     
+    getMasterURL
+    export SPARK_WORKER_DIR=/tmp/$USER/$JOB_ID/work
+    export SPARK_LOCAL_DIR=/tmp/$USER/$JOB_ID
+    mkdir -p $SPARK_WORKER_DIR $SPARK_LOCAL_DIR 
+    
+    echo "Master URL = $MASTER_URL"
+    hostname > $JOB_HOME/$SLURM_PROCID 
     # Start the Worker
     "$SPARK_HOME/bin/spark-class" \
-        org.apache.spark.deploy.worker.Worker $MASTER_URL
+      org.apache.spark.deploy.worker.Worker $MASTER_URL
 ```
 
+## Running the job
+
+To kick things off, all that's necessary is `sbatch batch-job.slurm`. Once the job
+launches, a series of output files will be generated, one for each task and one for
+the parent batch job itself.
+
+
+In your `slurm-#########-task-0.out` file, you'll see the instructions for port
+forwarding. Simply run these commands from a new terminal session.
+
+### The Spark Master UI
+
+![My screenshot]({{ site.url }}/assets/img/spark_master_ui.png)
+
+### The Spark Job UI
+
+![My screenshot]({{ site.url }}/assets/img/spark-job-ui.png)
 
 
 
+<iframe width="100%" height="315" 
+src="http://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0" allowfullscreen></iframe>
 
+[server-fault]: http://serverfault.com/questions/776687/how-can-i-run-spark-on-a-cluster-using-slurm
+[gh-spark-wc]: https://github.com/bigdata-vandy/spark-wordcount
+[accre-hpc]:  https://github.com/accre/BigData/tree/master/spark-slurm
+[accre-gh-ss]: https://github.com/accre/BigData/tree/master/spark-slurm
 [slurm-srun]:   https://slurm.schedmd.com/srun.html
