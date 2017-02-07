@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Using Hadoop DistCp on the Cluster"
+title:  "Moving Data on the Cluster"
 author: Josh Arnold
 categories: hadoop io
 ---
@@ -9,16 +9,32 @@ categories: hadoop io
 For instructions on obtaining access to the Vanderbilt Big Data Cluster, 
 see [this blog post](page)
 
+## Using the Hadoop FileSystem
+To analyze big data you need big data. That is, you need to have data stored
+on disk.
+
+
+
+### Local <--> HDFS 
+
+```bash
+hadoop fs -copyFromLocal \
+  file:///scratch/$USER/some/data hdfs:///user/$USER/some/dir
+```
+
+
 ## DistCp
 
+### HDFS <--> HDFS
 
 
-## Copying Data Locally 
-
-
-## Copying from AWS to HDFS
+### AWS <--> HDFS
 
 A note on AWS credentials. 
+Using the command line tool 
+
+I've factored out setting these credentials into it's own script, since
+setting these environment variables comes up fairly often: 
 
 ```bash
 #!/bin/bash
@@ -26,9 +42,6 @@ A note on AWS credentials.
 export $(cat ~/.aws/credentials | grep -v "^\[" | awk '{print toupper($1)$2$3 }')
 
 ```
-
-I've factored out setting these credentials into it's own script, since
-setting these environment variables comes up often. 
 
 
 ```bash
