@@ -21,7 +21,7 @@ baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: ACCREVandy 
 github_username: bigdata-vandy 
-slack_channel:  
+slack_channel: ACCRE-Forum 
 
 # Build settings
 markdown: kramdown
