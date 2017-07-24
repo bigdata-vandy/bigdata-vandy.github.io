@@ -23,8 +23,12 @@ twitter_username: ACCREVandy
 github_username: bigdata-vandy 
 slack_channel: ACCRE-Forum 
 
+# Pages
+#include: ['_pages']
+
+permalink: "/:title/"
 # Build settings
-markdown: kramdown
+markdown: kramdown 
 theme: minima
 gems:
   - jekyll-feed

@@ -41,9 +41,11 @@ $SPARK_HOME/bin/spark-shell
 If you've connected to the BigData cluster through SFTP 
 (via `ssh bigdata.accre.vanderbilt.edu`), you'll need
 to start the REPL first:
+
 ```bash
 spark-shell
 ```
+
 and then specify that you're using YARN as the application Master:
 
 ```bash
@@ -72,7 +74,7 @@ SQL context available as sqlContext.
 
 These last two lines indicate the entry points for using the Spark API, the
 Spark context `sc` and the SQL context `sqlContext`. We won't be using the 
-SQL context in this tutorial but we will invoke the Spark context, whcich we
+SQL context in this tutorial but we will invoke the Spark context, which we
 can examine by simply typing `sc` into the Scala REPL:
 
 ```
@@ -84,7 +86,8 @@ scala>
 
 ### Creating an RDD 
 
-We're going to use the `textFile` method of `sc` to load in a file in the `/data`
+We're going to use the `textFile` method of the SparkContext `sc` 
+to load in a file in the `/data`
 directory of HDFS (note that we could also read in a local file as well) and 
 store it as a *Resilient Distributed Dataset* (RDD):
 
@@ -94,10 +97,11 @@ lines: org.apache.spark.rdd.RDD[String] = hdfs:///data/Spark_README.md MapPartit
 ```
 
 The REPL indicates that lines is now a `MapPartitionsRDD`. 
-In the grand scheme of things, mapping to different partitions is the key to the
-map-reduce paradigm; instead of sending data to a single node and processing 
-it in chunks,
-the program is sent to where the data resides on disk and executed in parallel fashion.
+In the grand scheme of things, mapping to different partitions is the key 
+to the map-reduce paradigm; instead of sending data to a single node and 
+processing 
+it in chunks, the program is sent to the node(s) where the data resides on 
+disk and is executed in parallel fashion.
 Pretty cool right?
 
 *Note that `lines` is declared as `val` for value; in addition to being a 
@@ -254,8 +258,7 @@ and view the contents via:
 
 ## Conclusions
 
-This is an admittedly simple example, but it demonstrates the core components of 
-a map-reduce job. And, it shows off the relative simplicity of writing distributed
-jobs in Spark. The `hadoop fs` commands should be pretty intuitive for \*nix users,
-but we've planned another blog post for moving data around on the cluster. Feel free
-to contact us
+This is an admittedly simple example, but it demonstrates the core components 
+of a map-reduce job. And, it shows off the relative simplicity of 
+writing distributed jobs in Spark. The `hadoop fs` commands should be 
+pretty intuitive for \*nix users.
